@@ -1,0 +1,24 @@
+function solveED(genMax, genMin, genPrice, genFixPrice, windPrice, windFcast, dem)
+    # Parameters of the model
+    noGen = size(genMax, 1)
+    noWind = size(windFcast, 1)
+    # Create the model
+    ed = Model(with_optimizer(GLPK.Optimizer))
+    # Define the variables
+    @variable(ed, genMin[i] <= gen[i=1:noGen] <= genMax[i])
+    @variable(ed, 0 <= wind[i=1:noWind] <= windFcast[i])
+    # Define the constraints
+    # These next constraints are redundant because are the same as formulating the variables
+    # with upper and lower bounds. They can be used to get the dual variable of these bounds
+    @constraint(ed, genUp[i=1:noGen], gen[i] <= genMax[i]) # Upper bound
+    @constraint(ed, genLo[i=1:noGen], gen[i] >= genMin[i]) # Lower bound
+    @constraint(ed, windUp[i=1:noWind], wind[i] <= windFcast[i]) # Upper bound
+    # This constraint is need because is the power balance
+    @constraint(ed, powBal, sum(gen[i] for i=1:noGen) + sum(wind[i] for i=1:noWind) == dem)
+    # Define the objective function
+    @objective(ed, Min, dot(genPrice, gen) + dot(windPrice, wind))
+    # Solve the optimization model
+    optimize!(ed)
+    # Return the results of the model
+    return value.(gen), value.(wind), objective_value(ed), powBal, genUp, genLo
+end

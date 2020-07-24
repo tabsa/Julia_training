@@ -1,0 +1,31 @@
+function solveUC(genMax, genMin, genPrice, genFixPrice, windPrice, windFcast, dem)
+    # Parameters of the model
+    noGen = size(genMax, 1)
+    noWind = size(windFcast, 1)
+    # Create the model
+    uc = Model(with_optimizer(GLPK.Optimizer))
+    # Define the variables
+    #@variable(uc, genMin[i] <= gen[i=1:noGen] <= genMax[i])
+    @variable(uc, gen[i=1:noGen])
+    @variable(uc, 0 <= wind[i=1:noWind] <= windFcast[i])
+    @variable(uc, u_gen[i=1:noGen], Bin)
+    # Define the constraints
+    # These next constraints are redundant because are the same as formulating the variables
+    # with upper and lower bounds. They can be used to get the dual variable of these bounds
+    @constraint(uc, genUp[i=1:noGen], gen[i] <= genMax[i] * u_gen[i]) # Upper bound
+    @constraint(uc, genLo[i=1:noGen], gen[i] >= genMin[i] * u_gen[i]) # Lower bound
+    @constraint(uc, windUp[i=1:noWind], wind[i] <= windFcast[i]) # Upper bound
+    # This constraint is need because is the power balance
+    @constraint(uc, powBal, sum(gen) + sum(wind) == dem)
+    # Define the objective function
+    @objective(uc, Min, dot(genPrice, gen) + dot(windPrice, wind))
+    # Solve the optimization model
+    optimize!(uc)
+    # Push the optimization status and Return the results of the model
+    status = termination_status(uc)
+    if status != MOI.OPTIMAL
+        return status, zeros(lenght(noGen)), zeros(length(gen)), zeros(length(noWind)), 0.0, InF, 0.0, 0.0
+    else
+        return status, value.(gen), value.(u_gen), value.(wind), objective_value(uc), powBal, genUp, genLo
+    end
+end

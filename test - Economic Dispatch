@@ -1,0 +1,73 @@
+# Import packages
+using JuMP # Math prog
+using GLPK # Solver
+#using Cbc # Solver for LP/MIP
+#using Ipopt  # Solver for NLP
+using DataFrames # Dataframes
+using CSV # CSV files
+using XLSX # Excel files
+using Random # Random toolbox
+using Statistics # Statistics toolbox
+using LinearAlgebra # Algebra operations
+# Import functions
+include("print_it")
+include("solveED")
+include("solveUC")
+
+# Define the input data
+g_max = [1000, 1000] # Max power of generators
+g_min = [0, 300] # Min power of generators
+c_g = [50, 100] # Linear cost of generators
+c_g0 = [1000, 0] # Fixed cost of generators
+c_w = [50, 50] # Linear cost of wind generators
+d = 1500 # Total demand
+w_f = [150, 50] # Wind forecast
+
+# Solve the Economic Dispatch problem - Calling solveED function
+(g_opt, w_opt, obj, eq_powBal) = solveED(g_max, g_min, c_g, c_g0, c_w, w_f, d)
+
+# Print the results
+println("\n")
+println("Dispatch of Generators: ", g_opt, " MW")
+println("Dispatch of Wind: ", w_opt, " MW")
+println("Wind spillage: ", w_f-w_opt, " MW")
+println("Total cost: ", obj, " \$")
+println("\n")
+println("Market clearing price: ", dual(eq_powBal), " \$/MWh")
+
+# Solve the Economic Dispatch problem - Incremental costs for generator G1
+c_g_scale_df = DataFrame(Symbol("Dispatch of Generator 1 (MW)") => Float64[],
+               Symbol("Dispatch of Generator 2 (MW)") => Float64[],
+               Symbol("Dispatch of Wind 1 (MW)") => Float64[],
+               Symbol("Dispatch of Wind 2 (MW)") => Float64[],
+               Symbol("Spillage of Wind(MW)") => Float64[],
+               Symbol("Total cost(\$)") => Float64[])
+
+# For-loop cycle to simulate the incremental costs
+start = time()
+for incrPr_g1 = 0.5:0.1:3.0
+    c_g_incr = [c_g[1]*incrPr_g1, c_g[2]] # Update the price of gen_1 with the incremental factor
+    # Call solveED function - using c_g_incr as input for the gen_prices
+    (g_opt, w_opt, obj, eq_powBal) = solveED(g_max, g_min, c_g_incr, c_g0, c_w, w_f, d)
+    # Push the results into the DataFrame, because it starts empty
+    push!(c_g_scale_df, (g_opt[1], g_opt[2], w_opt[1], w_opt[2], sum(w_f-w_opt), obj))
+end
+compTime = time()-start
+# Print the results for each incremental cost
+println("\n")
+println("ED problem with incremental cost in generator 1")
+println("Computation time: ", compTime, " seconds")
+@show c_g_scale_df
+
+# Solve the Unit Commitment problem - Calling solveUC function
+(status, g_opt, u_opt, w_opt, obj, eq_powBal) = solveUC(g_max, g_min, c_g, c_g0, c_w, w_f, d)
+
+# Print the results
+println("\n")
+println("Commitment of Generators: ", u_opt)
+println("Dispatch of Generators: ", g_opt, " MW")
+println("Dispatch of Wind: ", w_opt, " MW")
+println("Wind spillage: ", w_f-w_opt, " MW")
+println("Total cost: ", obj, " \$")
+println("\n")
+#println("Market clearing price: ", dual(eq_powBal), " \$/MWh")
