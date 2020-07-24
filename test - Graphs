@@ -1,0 +1,76 @@
+# Import packages
+using JuMP # Math prog
+using GLPK # Solver
+#using Cbc # Solver for LP/MIP
+#using Ipopt  # Solver for NLP
+using DataFrames # Dataframes
+using CSV # CSV files
+using XLSX # Excel files
+using Random # Random toolbox
+using Statistics # Statistics toolbox
+using LinearAlgebra # Algebra operations
+using GraphPlot # Plot Graphs from LightGraphs pkg
+using LightGraphs # Build graphs
+using Colors # Adjust colors
+# Import functions
+include("print_it")
+include("solveED")
+include("solveUC")
+
+# Example of a Graph - 𝒢 = (𝒱,ℰ)
+# pair(i,j): represent each vertex 𝓋 ∈ 𝒱
+𝒢 = [
+    0 1 0 0 0 0;
+    1 0 1 1 0 0;
+    0 1 0 0 1 1;
+    0 1 0 0 1 0;
+    0 0 1 1 0 0;
+    0 0 1 0 0 0;
+]
+
+grPl = SimpleGraph(𝒢)
+gplot(grPl)
+
+# Vertex cover problem - min ∑_{𝓋 ∈ 𝒱} yᵥ
+noVer = nv(grPl) # nv() - no of vertices of a graph
+# Create the model
+ver_cov = Model(with_optimizer(GLPK.Optimizer))
+# Set the variables
+@variable(ver_cov, y[1:noVer], Bin)
+# Set of constraints
+@constraint(ver_cov, edge[i=1:noVer, j=1:noVer; 𝒢[i,j] == 1], y[i] + y[j] >= 1)
+# grPl[i,j] == 1 is a if-conditional only when we have 2-vertex connected with edge
+# Set the objective function
+@objective(ver_cov, Min, sum(y))
+# Optimize the model
+optimize!(ver_cov)
+
+# Print the results
+@show value.(y)
+membership = round.(Int, value.(y)) # Convert to Int
+membership = membership + ones(Int, nv(grPl)) # Add 1 more for the color index
+nodecolor = [colorant"red", colorant"blue"] # red = 1 and blue = 2
+nodefillc = nodecolor[membership]
+gplot(grPl, nodefillc = node)
+
+# Dominating set - min ∑_{𝓋 ∈ 𝒱} xᵥ
+# Graph containing the edges
+G2 = [
+    0 1 0 0 0 0 0 0 0 1 0 ;
+    1 0 1 0 0 0 0 0 0 0 1;
+    0 1 0 1 0 1 0 0 0 0 0;
+    0 0 1 0 1 0 0 0 0 0 0;
+    0 0 0 1 0 1 0 0 0 0 0;
+    0 0 1 0 1 0 1 0 0 0 0;
+    0 0 0 0 0 1 0 1 0 0 0;
+    0 0 0 0 0 0 1 0 1 0 1;
+    0 0 0 0 0 0 0 1 0 1 1;
+    1 0 0 0 0 0 0 0 1 0 1;
+    0 1 0 0 0 0 0 1 1 1 0;
+]
+grPl2 = SimpleGraph(G2)
+noVer2 = nv(grPl2)
+# Create the model
+dom_set = Model(with_optimizer(GLPK.Optimizer))
+# Set the variable
+@variable(dom_set, xᵥ[i=1:noVer2], Bin)
