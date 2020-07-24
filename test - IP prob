@@ -1,0 +1,73 @@
+# Import packages
+using JuMP # Math prog
+#using GLPK # Solver
+using Cbc # Solver for LP/MIP
+#using Ipopt  # Solver for NLP
+using DataFrames # Dataframes
+using CSV # CSV files
+using XLSX # Excel files
+using Random # Random toolbox
+using Statistics # Statistics toolbox
+# Import functions
+include("print_it")
+
+# Integer programming problem
+# a * x >= b * y
+# c * x >= d * (1-y)
+# y ∈ {0, 1}
+
+# Define the parameters of the IP problem
+a = rand(1:100, 5, 5)
+c = rand(1:100, 5, 5)
+b = rand(1:100, 5) # 5 constraints
+d = rand(1:100, 5) # 5 constraints
+
+# Create the model - Disjunctive constraints
+model = Model(with_optimizer(Cbc.Optimizer, loglevel=0,  seconds=5))
+@variable(model, x[1:5])
+@variable(model, y, Bin)
+@constraint(model, a*x .>= b.*y)
+@constraint(model, c*x .>= d.*(1-y))
+
+# Create the model - Conditional constraints (big-M app)
+m = rand(1e4:1.1e4, 5)
+model2 = Model()
+@variable(model2, x[1:5])
+@variable(model2, z, Bin)
+@constraint(model2, a*x .<= b .+ (m.*(1-z))) # If-condition constraint
+# a*x <= b is valid when z=1, meaning if our b is low (out of our condition)
+# Then z=0 to make constraint valid but not fulfill b
+# Example: b is TSO reg-up, and x is generator reg-up. If TSO reg.up is out of
+# generator capacity, then z is forced to be z=0 in order to make the problem
+# feasible and the generator dispatch the rest, while not fulfilling the TSO reg-up
+# If the generator has capacity to fulfill TSO reg-up then z=1
+# Vectorized operator (.*) is used because z is Bin and not a regular var
+
+# Create the model - Modelling integer variables
+model3 = Model()
+lb = 7.45
+ub = 22.22
+@variable(model3, x) # Binary variable
+@variable(model3, y) # Integer variable
+@variable(model3, x3) # Semi-continous variable
+@constraint(model3, x in MOI.ZeroOne()) # x ∈ {0, 1}
+@constraint(model3, y in MOI.Integer()) # y ∈ Integer
+@constraint(model3, x3 in MOI.Semicontinuous(lb,ub)) # x3 ∈ {0} U {lb, ub}
+
+# Create the model - SOS1 and SOS2 (Special Ordered Sets)
+# SOS1 - Set of variables (usually Bin) that 1 var has to be non-zero, all others being 0.
+# SOS1 is used for a set of Bin vars, and one var is to be 1 and others 0
+# SOS2 - Set of variables (usually Bin) that 2 vars have to be non-zero, all others being 0.
+# SOS2 - these 2 vars needs to be consecutive in their ordering
+model4 = Model()
+@variable(model4, u[1:3])
+@variable(model4, v[1:3])
+@constraint(model4, u in MOI.SOS1([1.0, 2.0, 3.0])) # u ∈ SOS1
+# Weights are essentially an ordering on the variables.
+@constraint(model4, v in MOI.SOS2([3.0, 1.0, 2.0])) # v ∈ SOS2
+# Weight vector is more important in this case as the variables need to be consecutive according to the ordering. For example, in the above constraint, the possible pairs are:
+# Consecutive
+# (x[1] and x[3]) as they correspond to 3 and 2 resp. and thus can be non-zero
+# (x[2] and x[3]) as they correspond to 1 and 2 resp. and thus can be non-zero
+# Non-consecutive
+# (x[1] and x[2]) as they correspond to 3 and 1 resp. and thus cannot be non-zero
