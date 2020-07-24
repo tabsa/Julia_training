@@ -1,0 +1,68 @@
+# Import packages
+using JuMP # Math prog
+using GLPK # Solver
+#using Cbc # Solver for LP/MIP
+#using Ipopt  # Solver for NLP
+using DataFrames # Dataframes
+using CSV # CSV files
+using XLSX # Excel files
+using Random # Random toolbox
+using Statistics # Statistics toolbox
+# Import functions
+include("print_it")
+
+# Sudoku - IP problem
+# x[i,j,k] = 1 if cell(i,j) has number k
+# where, i is the row and j is the column
+
+# Create the model
+sudoku = Model(with_optimizer(GLPK.Optimizer))
+# Set the variable
+@variable(sudoku, x[i=1:9, j=1:9, k=1:9], Bin)
+# Set the constraints
+# row i and column j
+# ∑_{k=1:9} x[i,j,k] == 1 --> There can only be 1 number k per cell(i,j)
+@constraint(sudoku, con1[i=1:9, j=1:9], sum(x[i,j,k] for k in 1:9) == 1)
+# ∑_{i=1:9} x[i,j,k] == 1 --> 1 number k for the entire row i
+@constraint(sudoku, con2[idx=1:9, k=1:9], sum(x[idx,j,k] for j in 1:9) == 1)
+# ∑_{j=1:9} x[i,j,k] == 1 --> 1 number k for the entire column j
+@constraint(sudoku, con3[idx=1:9, k=1:9], sum(x[i,idx,k] for i in 1:9) == 1)
+# i,j = [1, 4, 7]
+# ∑_{i:i+2, j:j+2} x[i,j,k] == 1
+# We'll sum from i to i+2, e.g. i=4, r=4, 5, 6
+@constraint(sudoku, con4[i=1:3:7, j=1:3:7, k=1:9], sum(x[r,c,k] for  r in i:i+2, c in j:j+2) == 1)
+
+# Initial digital that have to be consider as constraints
+# E.g. x[1,1,k=5] = 1
+init_sol = [ 5 3 0 0 7 0 0 0 0;
+             6 0 0 1 9 5 0 0 0;
+             0 9 8 0 0 0 0 6 0;
+             8 0 0 0 6 0 0 0 3;
+             4 0 0 8 0 3 0 0 1;
+             7 0 0 0 2 0 0 0 6;
+             0 6 0 0 0 0 2 8 0;
+             0 0 0 4 1 9 0 0 5;
+             0 0 0 0 8 0 0 7 9]
+for i=1:9, j=1:9
+    # Set the constraint for init_sol != 0
+    if init_sol[i,j] != 0
+        # x[i,j, k = init_sol[i,j]] == 1
+        @constraint(sudoku, x[i,j,init_sol[i,j]] == 1)
+    end
+end
+
+# Optimize the Sudoku model
+optimize!(sudoku)
+
+# Transform the solution x to 2-D array
+x_val = round.(Int, value.(x)) # We may have solution close to 0 or 1
+# IP are solved as a series of linear programming, so we may have close 0 and 1
+# We have to round to be sure we have exact Int{0, 1}
+sol = zeros(Int, 9,9) # 2-D array (9 x 9)
+for i=1:9, j=1:9, k=1:9
+    if x_val[i,j,k] == 1
+        sol[i,j] = k
+    end
+end
+# Display the solution
+@show sol
